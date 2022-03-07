@@ -17,8 +17,11 @@ df_AH = pd.read_excel('data/df_AH.xlsx')
 """
 Evaluate the result 
 """
-stock1 = Stock('招商银行',df_AH=df_AH[['招商银行','招商银行.1']])
-stock2 = Stock('工商银行',df_AH=df_AH[['工商银行','工商银行.1']])
-stock3 = Stock('农业银行',df_AH=df_AH[['农业银行','农业银行.1']])
+stock1 = Stock('招商银行',df_AH=df_AH[['time','招商银行','招商银行.1']])
+stock2 = Stock('工商银行',df_AH=df_AH[['time','工商银行','工商银行.1']])
+stock3 = Stock('农业银行',df_AH=df_AH[['time','农业银行','农业银行.1']])
 
-stock1.trading_rule(show_transaction=True)
+stock1.trading_rule(show_transaction=True, is_save=True, show_time=1)
+stock2.trading_rule(show_transaction=True, is_save=True, show_time=1)
+stock3.trading_rule(show_transaction=True, is_save=True, show_time=1)
+

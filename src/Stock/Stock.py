@@ -19,14 +19,14 @@ class Stock:
         self.name = name
         self.df_AH = df_AH
         self.n = len(self.df_AH)
-        self.df_AH.columns = ['A','H']
+        self.df_AH.columns = ['time','A','H']
         self.rolling_window_size = 60 * 24 * 3
         self.df_AH['DR'] =1 - (self.df_AH['H'])/self.df_AH['A']
         self.__adjust_boundry__()
         self.df_AH['DR_mean'] = self.df_AH['DR'].rolling(self.rolling_window_size).mean()
         self.df_AH['DR_std'] = self.df_AH['DR_adjust'].rolling(self.rolling_window_size).std()
-        self.df_AH['DR_ub'] = self.df_AH['DR_mean']+self.df_AH['DR_std'] * 1
-        self.df_AH['DR_lb'] = self.df_AH['DR_mean']-self.df_AH['DR_std'] * 0.25
+        self.df_AH['DR_ub'] = self.df_AH['DR_mean']+self.df_AH['DR_std'] * 0.5
+        self.df_AH['DR_lb'] = self.df_AH['DR_mean']-self.df_AH['DR_std'] * 1
         self.record = pd.DataFrame()
 
     def __adjust_boundry__(self):
@@ -40,7 +40,7 @@ class Stock:
         self.df_AH['DR_adjust'] = 1 - self.df_AH['H_adjust']/self.df_AH['A']
 
 
-    def draw_price(self, is_save = False, save_path='../output'):
+    def draw_price(self, is_save = False, save_path='output'):
         plt.plot(self.df_AH.dropna()['A'],linewidth=1,label='A')
         plt.plot(self.df_AH.dropna()['H'],linewidth=1,label='HK')
         plt.legend()
@@ -51,7 +51,7 @@ class Stock:
             plt.savefig(save_path+ '/' + self.name + '_price.png',dpi=600, bbox_inches='tight')
         plt.show()
     
-    def draw_DR(self, is_save = False, save_path='../output'):
+    def draw_DR(self, is_save = False, save_path='output'):
         plt.plot(self.df_AH.dropna()['DR'], color='steelblue', label='DiscountRate',linewidth=0.8)
         plt.plot(self.df_AH.dropna()['DR_mean'], color='orange', label='Mean')
         plt.plot(self.df_AH.dropna()['DR_ub'], color='orange',linestyle='--', label='ub')
@@ -68,7 +68,7 @@ class Stock:
     output:
         buyPoint, sellPoint, value, psntValue
     """
-    def trading_rule(self, psntValue=100, show_transaction=False, is_save=False,save_path='../output'):
+    def trading_rule(self, psntValue=100, show_transaction=False, is_save=False,save_path='output',show_time=-1):
         if len(self.record)==0:
             # extract data
             df = self.df_AH.copy()
@@ -112,8 +112,16 @@ class Stock:
                     isSell = False
                     isAllIn = False
             self.record = pd.DataFrame([value, buyPoint, sellPoint, close]).T
+            if is_save:
+                time = df['time'].values
+                signal = buyPoint - sellPoint
+                df_signal = pd.DataFrame([time,close,value,signal]).T
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                df_signal.to_excel(save_path + '/' + self.name + '_signal.xlsx')
 
-        self.draw_trading(show_transaction=show_transaction,is_save=is_save,save_path=save_path)
+
+        self.draw_trading(show_transaction=show_transaction,is_save=is_save,save_path=save_path,show_time=show_time)
         # if not show_transaction:
         #     plt.plot(value, label='Value',linewidth=1)
         #     plt.legend()
@@ -152,12 +160,12 @@ class Stock:
         return self.record
 
 
-    def draw_trading(self, show_transaction=False, is_save=False, save_path='../output'):
+    def draw_trading(self, show_transaction=False, is_save=False, save_path='output',show_time=-1):
         value = self.record[0].values
         buyPoint = self.record[1].values
         sellPoint = self.record[2].values
         df = self.df_AH.dropna(how='any')
-        print('!!! in draw', value)
+        # print('!!! in draw', value)
         if not show_transaction:
             plt.plot(value, label='Value',linewidth=1)
             plt.legend()
@@ -167,6 +175,8 @@ class Stock:
                     os.makedirs(save_path)
                 plt.savefig(save_path+ '/' + self.name + '_value.png',dpi=600, bbox_inches='tight')
             plt.show()
+            plt.pause(show_time)
+            plt.close()
 
         elif show_transaction:
             plt.subplot(2,1,1)
@@ -192,3 +202,5 @@ class Stock:
                     os.makedirs(save_path)
                 plt.savefig(save_path+ '/' + self.name + '_value_with_transaction.png',dpi=600, bbox_inches='tight')
             plt.show()
+            plt.pause(show_time)
+            plt.close()
