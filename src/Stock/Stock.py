@@ -27,7 +27,8 @@ class Stock:
         self.df_AH['DR_std'] = self.df_AH['DR_adjust'].rolling(self.rolling_window_size).std()
         self.df_AH['DR_ub'] = self.df_AH['DR_mean']+self.df_AH['DR_std'] * 1
         self.df_AH['DR_lb'] = self.df_AH['DR_mean']-self.df_AH['DR_std'] * 0.25
-        
+        self.record = pd.DataFrame()
+
     def __adjust_boundry__(self):
         H = self.df_AH['H'].values
         for t in range(self.n):
@@ -47,7 +48,7 @@ class Stock:
         if is_save:
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            plt.savefig(save_path+ '/' + self.name + 'price.png',dpi=600, bbox_inches='tight')
+            plt.savefig(save_path+ '/' + self.name + '_price.png',dpi=600, bbox_inches='tight')
         plt.show()
     
     def draw_DR(self, is_save = False, save_path='../output'):
@@ -60,81 +61,134 @@ class Stock:
         if is_save:
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            plt.savefig(save_path + '/' + self.name + 'DR.png',dpi=600, bbox_inches='tight')
+            plt.savefig(save_path + '/' + self.name + '_DR.png',dpi=600, bbox_inches='tight')
         plt.show()
 
     """
     output:
-        
+        buyPoint, sellPoint, value, psntValue
     """
-    def trading_rule(self, psntValue=100,show_transaction=False,save_path=''):
-        # extract data
-        df = self.df_AH
-        df = df.dropna(how='any')
-        close = df['H'].values
-        open = df['H'].values
-        ub = df['DR_ub'].values
-        lb = df['DR_lb'].values
-        DR = df['DR'].values
-        n = len(df)
-        # initialize state
-        value = np.zeros(n)
-        buyPoint = np.zeros(n)
-        sellPoint = np.zeros(n)
-        psntVolm = psntValue/open[0]
-        isAllIn = True
-        isSell = False
-        isBuy = False
-        for t in range(n):
-            # cal present value
-            if isAllIn:
-                psntValue = psntVolm * open[t]
-            value[t] = psntValue
-            # no operation
-            if not (isBuy or isSell):
-                if DR[t] < lb[t] and isAllIn:
-                    isSell = True
-                    # all in
-                elif DR[t] > ub[t] and not isAllIn:
-                    # all out
-                    isBuy = True
-            # operation
-            elif isBuy:
-                buyPoint[t] = 1
-                isBuy = False
-                psntVolm = psntValue/(open[t] * (1 + self.transaction_rate))
-                isAllIn = True
-            else:# sell
-                sellPoint[t] = 1
-                psntValue *= (1 - self.transaction_rate)
-                isSell = False
-                isAllIn = False
-        # value, psntValue, buyPoint, sellPoint = trading_rule(df_AH)
+    def trading_rule(self, psntValue=100, show_transaction=False, is_save=False,save_path='../output'):
+        if len(self.record)==0:
+            # extract data
+            df = self.df_AH.copy()
+            df = df.dropna(how='any')
+            close = df['H'].values
+            open = df['H'].values
+            ub = df['DR_ub'].values
+            lb = df['DR_lb'].values
+            DR = df['DR'].values
+            n = len(df)
+            # initialize state
+            value = np.zeros(n)
+            buyPoint = np.zeros(n)
+            sellPoint = np.zeros(n)
+            psntVolm = psntValue/open[0]
+            isAllIn = True
+            isSell = False
+            isBuy = False
+            for t in range(n):
+                # cal present value
+                if isAllIn:
+                    psntValue = psntVolm * open[t]
+                value[t] = psntValue
+                # no operation
+                if not (isBuy or isSell):
+                    if DR[t] < lb[t] and isAllIn:
+                        isSell = True
+                        # all in
+                    elif DR[t] > ub[t] and not isAllIn:
+                        # all out
+                        isBuy = True
+                # operation
+                elif isBuy:
+                    buyPoint[t-1] = 1
+                    isBuy = False
+                    psntVolm = psntValue/(open[t-1] * (1 + self.transaction_rate))
+                    isAllIn = True
+                else:# sell
+                    sellPoint[t] = 1
+                    psntValue *= (1 - self.transaction_rate)
+                    isSell = False
+                    isAllIn = False
+            self.record = pd.DataFrame([value, buyPoint, sellPoint, close]).T
 
-        plt.plot(value, label='Value',linewidth=1)
-        if show_transaction:
-            plt.scatter(np.arange(len(value))[buyPoint == 1],value[buyPoint == 1],color='red',label='Buy',s=10)
-            plt.scatter(np.arange(len(value))[sellPoint == 1],value[sellPoint == 1],color='green',label='Sell',s=10)
-        plt.legend()
-        plt.title(self.name + '\nFinal Value: {:.2f}'.format(psntValue))
-        if save_path != '':
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plt.savefig(save_path+ '/' + self.name + 'value.png',dpi=600, bbox_inches='tight')
-        plt.show()
+        self.draw_trading(show_transaction=show_transaction,is_save=is_save,save_path=save_path)
+        # if not show_transaction:
+        #     plt.plot(value, label='Value',linewidth=1)
+        #     plt.legend()
+        #     plt.title(self.name + '\nFinal Value: {:.2f}'.format(psntValue))
+        #     if is_save:
+        #         if not os.path.exists(save_path):
+        #             os.makedirs(save_path)
+        #         plt.savefig(save_path+ '/' + self.name + '_value.png',dpi=600, bbox_inches='tight')
+        #     plt.show()
 
-        if show_transaction:
+        # elif show_transaction:
+        #     plt.subplot(2,1,1)
+        #     plt.plot(value, label='Value',linewidth=1)
+        #     plt.scatter(np.arange(len(value))[buyPoint == 1],value[buyPoint == 1],color='red',label='Buy',s=10)
+        #     plt.scatter(np.arange(len(value))[sellPoint == 1],value[sellPoint == 1],color='green',label='Sell',s=10)
+        #     plt.legend()
+        #     plt.title(self.name + '\nFinal Value: {:.2f}'.format(psntValue))
+
+        #     plt.subplot(2,1,2)
+        #     plt.plot(df['DR'], color='gray', label='DiscountRate',linewidth=0.2,zorder=1)
+        #     plt.plot(df['DR_mean'], color='orange', label='Mean')
+        #     plt.plot(df['DR_ub'], color='orange',linestyle='--', label='ub')
+        #     plt.plot(df['DR_lb'], color='orange',linestyle='--', label='lb')
+        #     plt.scatter(df.index[buyPoint == 1],df['DR'][buyPoint == 1],color='red',label='Buy',s=10,zorder=2)
+        #     plt.scatter(df.index[sellPoint == 1],df['DR'][sellPoint == 1],color='green',label='Sell',s=10,zorder=2)
+        #     plt.legend()
+        #     plt.title(self.name + '\nDiscount Rate')
+        #     plt.tight_layout()
+
+        #     if is_save:
+        #         if not os.path.exists(save_path):
+        #             os.makedirs(save_path)
+        #         plt.savefig(save_path+ '/' + self.name + '_value_with_transaction.png',dpi=600, bbox_inches='tight')
+        #     plt.show()
+
+        return self.record
+
+
+    def draw_trading(self, show_transaction=False, is_save=False, save_path='../output'):
+        value = self.record[0].values
+        buyPoint = self.record[1].values
+        sellPoint = self.record[2].values
+        df = self.df_AH.dropna(how='any')
+        print('!!! in draw', value)
+        if not show_transaction:
+            plt.plot(value, label='Value',linewidth=1)
+            plt.legend()
+            plt.title(self.name + '\nFinal Value: {:.2f}'.format(value[-1]))
+            if is_save:
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                plt.savefig(save_path+ '/' + self.name + '_value.png',dpi=600, bbox_inches='tight')
+            plt.show()
+
+        elif show_transaction:
+            plt.subplot(2,1,1)
+            plt.plot(value, label='Value',linewidth=1,zorder=1)
+            plt.scatter(np.arange(len(value))[buyPoint == 1],value[buyPoint == 1],color='red',label='Buy',s=10,zorder=2)
+            plt.scatter(np.arange(len(value))[sellPoint == 1],value[sellPoint == 1],color='green',label='Sell',s=10,zorder=2)
+            plt.legend()
+            plt.title(self.name + '\nFinal Value: {:.2f}'.format(value[-1]))
+
+            plt.subplot(2,1,2)
+
             plt.plot(df['DR'], color='gray', label='DiscountRate',linewidth=0.2,zorder=1)
             plt.plot(df['DR_mean'], color='orange', label='Mean')
-            plt.plot(df['DR_ub'], color='orange',linestyle='--', label='ub')
-            plt.plot(df['DR_lb'], color='orange',linestyle='--', label='lb')
-            plt.scatter(df.index[buyPoint == 1],df['DR'][buyPoint == 1],color='red',label='Buy',s=10,zorder=2)
-            plt.scatter(df.index[sellPoint == 1],df['DR'][sellPoint == 1],color='green',label='Sell',s=10,zorder=2)
+            plt.plot(df['DR_ub'], color='orange',linestyle='--', label='ub',zorder=2)
+            plt.plot(df['DR_lb'], color='orange',linestyle='--', label='lb',zorder=2)
+            plt.scatter(df.index[buyPoint == 1],df['DR'][buyPoint == 1],color='red',label='Buy',s=10,zorder=3)
+            plt.scatter(df.index[sellPoint == 1],df['DR'][sellPoint == 1],color='green',label='Sell',s=10,zorder=3)
             plt.legend()
             plt.title(self.name + '\nDiscount Rate')
-            # if save_path != '':
-            #     if not os.path.exists(save_path):
-            #         os.makedirs(save_path)
-            #     plt.savefig(save_path + '/' + self.name + 'DR_transaction.png',dpi=600, bbox_inches='tight')
+            plt.tight_layout()
+            if is_save:
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                plt.savefig(save_path+ '/' + self.name + '_value_with_transaction.png',dpi=600, bbox_inches='tight')
             plt.show()
-        return value, psntValue, buyPoint, sellPoint
