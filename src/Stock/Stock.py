@@ -3,6 +3,8 @@ import tushare as ts
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from ou_noise import ou
+
 plt.rcParams['font.sans-serif'] = ['Arial Unicode MS'] # 用来正常显示中文标签
 plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
@@ -14,21 +16,51 @@ plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 5、中央结算收费：每宗交易金额的0.002%，支付予结算所(最低港币2元,最高港币100元)"""
 
 class Stock:
-    def __init__(self, name, df_AH):
+    def __init__(self, name, df_AH, week=False):
         self.transaction_rate = np.sum([0.0025, 0.001, 0.00003, 0.00005, 0.00002])
         self.name = name
         self.df_AH = df_AH
         self.n = len(self.df_AH)
-        self.df_AH.columns = ['time','A','H']
+        if week == False:
+            self.df_AH.columns = ['time','A','H']
+        else:
+            self.df_AH.columns = ['time','A','H','week_num']
         self.rolling_window_size = 60 * 24 * 3
         self.df_AH['DR'] =1 - (self.df_AH['H'])/self.df_AH['A']
         self.__adjust_boundry__()
-        self.df_AH['DR_mean'] = self.df_AH['DR'].rolling(self.rolling_window_size).mean()
-        self.df_AH['DR_std'] = self.df_AH['DR_adjust'].rolling(self.rolling_window_size).std()
-        self.df_AH['DR_ub'] = self.df_AH['DR_mean']+self.df_AH['DR_std'] * 0.5
-        self.df_AH['DR_lb'] = self.df_AH['DR_mean']-self.df_AH['DR_std'] * 1
+        self.u1 = 4
+        self.l1 = 2
+        if week == False:
+            self.df_AH['DR_mean'] = self.df_AH['DR'].rolling(self.rolling_window_size).mean()
+            self.df_AH['DR_std'] = self.df_AH['DR_adjust'].rolling(self.rolling_window_size).std()
+            self.df_AH['DR_ub'] = self.df_AH['DR_mean']+self.df_AH['DR_std'] * self.u1
+            self.df_AH['DR_lb'] = self.df_AH['DR_mean']-self.df_AH['DR_std'] * self.l1
+        else: # rolling weekly
+            ou_weekly,week_list = self.__ou_weekly__()
+            # ou_weekly[ou_weekly[:,0]!=0,:][:-1]
+            # week_temp = 
+            df_temp = pd.DataFrame(ou_weekly[ou_weekly[:,0]!=0,1:][:-1])
+            df_temp.columns=['return_speed','DR_mean','DR_std']
+            df_temp['week_num'] = week_list[1:]
+            self.df_AH = pd.merge(self.df_AH, df_temp, on='week_num',how='left')
+            self.df_AH['DR_ub'] = self.df_AH['DR_mean']+self.df_AH['DR_std'] * self.u1
+            self.df_AH['DR_lb'] = self.df_AH['DR_mean']-self.df_AH['DR_std'] * self.l1
+
         self.record = pd.DataFrame()
 
+    def __ou_weekly__(self):
+        week_list = self.df_AH.groupby('week_num').week_num.agg(lambda x : x.mode()[0]).values
+        # ou_weekly[i][0] = 1 if this week isnot missed else missed
+        ou_weekly = np.zeros((max(week_list)+1,4))
+        for w in week_list:
+            # print(w)
+            # DR = self.df_AH[self.df_AH['week_num']==w]['DR_adjust'].values
+            DR = self.df_AH[self.df_AH['week_num']==w]['DR'].values
+            t = np.arange(1,len(DR)+1,1)
+            ou_weekly[w][0] = 1
+            ou_weekly[w][1:] = ou.mle(t,DR)
+        return ou_weekly,week_list
+    #  This function adjust ub and lb considering transaction cost
     def __adjust_boundry__(self):
         H = self.df_AH['H'].values
         for t in range(self.n):
@@ -106,6 +138,8 @@ class Stock:
                     isBuy = False
                     psntVolm = psntValue/(open[t-1] * (1 + self.transaction_rate))
                     isAllIn = True
+                    # psntValue = psntVolm * open[t]
+
                 else:# sell
                     sellPoint[t] = 1
                     psntValue *= (1 - self.transaction_rate)
@@ -179,10 +213,11 @@ class Stock:
             plt.close()
 
         elif show_transaction:
+            transaction_s = 5
             plt.subplot(2,1,1)
             plt.plot(value, label='Value',linewidth=1,zorder=1)
-            plt.scatter(np.arange(len(value))[buyPoint == 1],value[buyPoint == 1],color='red',label='Buy',s=10,zorder=2)
-            plt.scatter(np.arange(len(value))[sellPoint == 1],value[sellPoint == 1],color='green',label='Sell',s=10,zorder=2)
+            plt.scatter(np.arange(len(value))[buyPoint == 1],value[buyPoint == 1],color='red',label='Buy',s=transaction_s,zorder=2)
+            plt.scatter(np.arange(len(value))[sellPoint == 1],value[sellPoint == 1],color='green',label='Sell',s=transaction_s,zorder=2)
             plt.legend()
             plt.title(self.name + '\nFinal Value: {:.2f}'.format(value[-1]))
 
@@ -192,8 +227,8 @@ class Stock:
             plt.plot(df['DR_mean'], color='orange', label='Mean')
             plt.plot(df['DR_ub'], color='orange',linestyle='--', label='ub',zorder=2)
             plt.plot(df['DR_lb'], color='orange',linestyle='--', label='lb',zorder=2)
-            plt.scatter(df.index[buyPoint == 1],df['DR'][buyPoint == 1],color='red',label='Buy',s=10,zorder=3)
-            plt.scatter(df.index[sellPoint == 1],df['DR'][sellPoint == 1],color='green',label='Sell',s=10,zorder=3)
+            plt.scatter(df.index[buyPoint == 1],df['DR'][buyPoint == 1],color='red',label='Buy',s=transaction_s,zorder=3)
+            plt.scatter(df.index[sellPoint == 1],df['DR'][sellPoint == 1],color='green',label='Sell',s=transaction_s,zorder=3)
             plt.legend()
             plt.title(self.name + '\nDiscount Rate')
             plt.tight_layout()
