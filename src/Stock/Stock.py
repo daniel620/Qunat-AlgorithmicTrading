@@ -96,9 +96,18 @@ class Stock:
             plt.savefig(save_path + '/' + self.name + '_DR.png',dpi=600, bbox_inches='tight')
         plt.show()
 
+    def draw_return(self):
+        rtnRate = self.record[4].values
+        n = len(rtnRate)
+        plt.plot(np.arange(n)[np.isnan(rtnRate)==False], rtnRate[np.isnan(rtnRate)==False])
+        plt.grid()
+        plt.xlim(0, n)
+        plt.show()
+
+
     """
     output:
-        buyPoint, sellPoint, value, psntValue
+        buyPoint, sellPoint, value, psntValue, rtnRate
     """
     def trading_rule(self, psntValue=100, show_transaction=False, is_save=False,save_path='output',show_time=-1):
         if len(self.record)==0:
@@ -119,6 +128,11 @@ class Stock:
             isAllIn = True
             isSell = False
             isBuy = False
+            # to cal return rate 
+            lastBuyValue = psntValue
+            psntSellValue = psntValue
+            rtnRate = np.full(n,np.nan)
+
             for t in range(n):
                 # cal present value
                 if isAllIn:
@@ -134,18 +148,40 @@ class Stock:
                         isBuy = True
                 # operation
                 elif isBuy:
-                    buyPoint[t-1] = 1
+                    # 这里为什么要使用t-1，而不是直接使用t呢？
+                    #######
+                    # buyPoint[t-1] = 1
+                    # isBuy = False
+                    # psntVolm = psntValue/(open[t-1] * (1 + self.transaction_rate))
+                    # isAllIn = True
+                    #######
+
+                    # 尝试改成t之后
+                    #######
+                    buyPoint[t] = 1
                     isBuy = False
-                    psntVolm = psntValue/(open[t-1] * (1 + self.transaction_rate))
+                    psntVolm = psntValue/(open[t] * (1 + self.transaction_rate))
                     isAllIn = True
+                    ######
+
                     # psntValue = psntVolm * open[t]
+
+                    # cal return rate 
+                    lastBuyValue = psntValue
 
                 else:# sell
                     sellPoint[t] = 1
                     psntValue *= (1 - self.transaction_rate)
                     isSell = False
                     isAllIn = False
-            self.record = pd.DataFrame([value, buyPoint, sellPoint, close]).T
+
+                    # cal return rate
+                    psntSellValue = psntValue
+                    rtnRate[t] = psntSellValue/ lastBuyValue - 1
+                
+
+            self.record = pd.DataFrame([value, buyPoint, sellPoint, close, rtnRate]).T
+            # self.record.columns = ['value', 'buyPoint', 'sellPoint', 'close', 'rtnRate']
             if is_save:
                 time = df['time'].values
                 signal = buyPoint - sellPoint
@@ -153,7 +189,8 @@ class Stock:
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
                 df_signal.to_excel(save_path + '/' + self.name + '_signal.xlsx')
-
+        
+        
 
         self.draw_trading(show_transaction=show_transaction,is_save=is_save,save_path=save_path,show_time=show_time)
         # if not show_transaction:
@@ -192,6 +229,8 @@ class Stock:
         #     plt.show()
 
         return self.record
+
+
 
 
     def draw_trading(self, show_transaction=False, is_save=False, save_path='output',show_time=-1):

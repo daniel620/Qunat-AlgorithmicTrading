@@ -18,14 +18,15 @@ df_AH = pd.read_excel('data/df_AH_week.xlsx')
 Evaluate the result 
 """
 stock1 = Stock('招商银行',df_AH=df_AH[['time','招商银行','招商银行.1','week_num']],week=True)
-stock2 = Stock('工商银行',df_AH=df_AH[['time','工商银行','工商银行.1','week_num']],week=True)
-stock3 = Stock('农业银行',df_AH=df_AH[['time','农业银行','农业银行.1','week_num']],week=True)
+# stock2 = Stock('工商银行',df_AH=df_AH[['time','工商银行','工商银行.1','week_num']],week=True)
+# stock3 = Stock('农业银行',df_AH=df_AH[['time','农业银行','农业银行.1','week_num']],week=True)
 
 # stock1 = Stock('招商银行',df_AH=df_AH[['time','招商银行','招商银行.1']],week=True)
 # stock2 = Stock('工商银行',df_AH=df_AH[['time','工商银行','工商银行.1']],week=True)
 # stock3 = Stock('农业银行',df_AH=df_AH[['time','农业银行','农业银行.1']],week=True)
 
 stock1.trading_rule(show_transaction=True, is_save=False, show_time=1)
-stock2.trading_rule(show_transaction=True, is_save=False, show_time=1)
-stock3.trading_rule(show_transaction=True, is_save=False, show_time=1)
+stock1.draw_return()
+# stock2.trading_rule(show_transaction=True, is_save=False, show_time=1)
+# stock3.trading_rule(show_transaction=True, is_save=False, show_time=1)
 
