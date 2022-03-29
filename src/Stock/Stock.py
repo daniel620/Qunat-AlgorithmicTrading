@@ -96,13 +96,42 @@ class Stock:
             plt.savefig(save_path + '/' + self.name + '_DR.png',dpi=600, bbox_inches='tight')
         plt.show()
 
-    def draw_return(self):
-        rtnRate = self.record[4].values
+    def draw_return(self,show_bar=True):
+        rtnRate = self.record['rtnRate'].values.astype(float)
+        accRtnRate = self.record['accRtnRate'].values.astype(float)
         n = len(rtnRate)
-        plt.plot(np.arange(n)[np.isnan(rtnRate)==False], rtnRate[np.isnan(rtnRate)==False])
-        plt.grid()
-        plt.xlim(0, n)
-        plt.show()
+        if not show_bar:
+            plt.subplot(2,1,1)
+            plt.plot(np.arange(n)[np.isnan(rtnRate)==False], rtnRate[np.isnan(rtnRate)==False])
+            plt.grid()
+            plt.xlim(0, n)
+            lim = max(rtnRate[np.isnan(rtnRate)==False])
+            if abs(min(rtnRate[np.isnan(rtnRate)==False])) > lim:
+                lim = abs(min(rtnRate[np.isnan(rtnRate)==False]))
+            lim *= 1.1
+            plt.ylim(-lim,lim)
+            plt.title('Return Rate')
+            plt.subplot(2,1,2)
+            plt.plot(np.arange(n)[np.isnan(accRtnRate)==False], accRtnRate[np.isnan(accRtnRate)==False])
+            plt.grid()
+            plt.xlim(0, n)
+
+            plt.title('Accumulative Return Rate')
+            
+            plt.tight_layout()
+            plt.show()
+        else:
+            plt.bar(np.arange(n)[(np.isnan(rtnRate)==False) & (rtnRate>0)], rtnRate[(np.isnan(rtnRate)==False) & (rtnRate>0)], width=200, color='r',label='win')
+            plt.bar(np.arange(n)[(np.isnan(rtnRate)==False) & (rtnRate<=0)], rtnRate[(np.isnan(rtnRate)==False) & (rtnRate<=0)], width=200, color='g',label='lose')
+
+            plt.plot(np.arange(n)[np.isnan(accRtnRate)==False], accRtnRate[np.isnan(accRtnRate)==False],linewidth=1,label='acc_return')
+
+            plt.legend()
+            plt.title('Return')
+            plt.grid()
+            plt.tight_layout()
+            plt.show()
+
 
 
     """
@@ -114,6 +143,7 @@ class Stock:
             # extract data
             df = self.df_AH.copy()
             df = df.dropna(how='any')
+            time = df['time'].values
             close = df['H'].values
             open = df['H'].values
             ub = df['DR_ub'].values
@@ -132,7 +162,8 @@ class Stock:
             lastBuyValue = psntValue
             psntSellValue = psntValue
             rtnRate = np.full(n,np.nan)
-
+            initialBuyValue = psntValue
+            accRtnRate = np.full(n, np.nan)
             for t in range(n):
                 # cal present value
                 if isAllIn:
@@ -178,17 +209,21 @@ class Stock:
                     # cal return rate
                     psntSellValue = psntValue
                     rtnRate[t] = psntSellValue/ lastBuyValue - 1
-                
+                    accRtnRate[t] = psntSellValue/ initialBuyValue -1
+            
+            # self.record = pd.DataFrame([value, buyPoint, sellPoint, close, rtnRate, accRtnRate]).T
+            signal = buyPoint - sellPoint
 
-            self.record = pd.DataFrame([value, buyPoint, sellPoint, close, rtnRate]).T
-            # self.record.columns = ['value', 'buyPoint', 'sellPoint', 'close', 'rtnRate']
+            self.record = pd.DataFrame([time, value, buyPoint, sellPoint, signal, close, rtnRate, accRtnRate]).T
+            self.record.columns = ['time','value', 'buyPoint', 'sellPoint','signal', 'close', 'rtnRate', 'accRtnRate']
+        if len(self.record)!=0:
             if is_save:
-                time = df['time'].values
-                signal = buyPoint - sellPoint
-                df_signal = pd.DataFrame([time,close,value,signal]).T
+                # df_signal = pd.DataFrame([time,close,value,signal]).T
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
-                df_signal.to_excel(save_path + '/' + self.name + '_signal.xlsx')
+                # df_signal.to_excel(save_path + '/' + self.name + '_signal.xlsx')
+                self.record.to_excel(save_path + '/' + self.name + '_record.xlsx')
+
         
         
 
@@ -231,12 +266,12 @@ class Stock:
         return self.record
 
 
-
+    
 
     def draw_trading(self, show_transaction=False, is_save=False, save_path='output',show_time=-1):
-        value = self.record[0].values
-        buyPoint = self.record[1].values
-        sellPoint = self.record[2].values
+        value = self.record['value'].values
+        buyPoint = self.record['buyPoint'].values
+        sellPoint = self.record['sellPoint'].values
         df = self.df_AH.dropna(how='any')
         # print('!!! in draw', value)
         if not show_transaction:
